@@ -1,5 +1,9 @@
 This repository contains a preliminary version of this paper. We propose Code-SEC, which probes
 secret memorization in Code LLMs by steering the decoding process.
+
+## Method
+<img src="Code-SEC/plots/ACL-method-v2.png" alt="Overview of Code-SEC" width="1000">
+
 ## Structure
 |         **Folder**         |                        **Description**                        |
 |:--------------------------:|:-------------------------------------------------------:|
@@ -26,58 +30,8 @@ You can use it by specifying the name of the secret to be detected and the locat
 To respect privacy, we only provide the hallucinated data used for fine-tuning the Weak Model,  which does not involve actual secret text. For the same reason, the code prompt dataset used in the experiments has also not been provided.
 ## Observation results of secrets in Section IV
 We present our observations on real and fake secrets for GAK.
-### Scatter Plot of Token Probabilities
-<table>
-  <tr>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/entropy_heatmap.png" alt="GAK entropy  heat map" width="400">
-        <p style="text-align: center;">GAK entropy heat map</p>
-      </figure>
-    </td>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/aggregated_entropy_dist.png" alt="Aggregated token-entropy dist" width="400">
-        <p style="text-align: center;">Aggregated token-entropy dist.</p>
-      </figure>
-    </td>
-  </tr>
-  
-</table>
-
 **Accuracy of cumulative entropy in identifying invalid secret tokens.**
-<table>
-  <tr>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/acc/Accuracy_vs_entropy.png" alt="Accuracy" width="400">
-        <figcaption>Accuracy</figcaption>
-      </figure>
-    </td>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/acc/F1-score_vs_entropy.png" alt="F1-score" width="400">
-        <figcaption>F1-score</figcaption>
-      </figure>
-    </td>
-    
-  </tr>
-    <tr>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/acc/Precision_vs_entropy.png" alt="Precision" width="400">
-        <figcaption>Precision</figcaption>
-      </figure>
-    </td>
-    <td>
-      <figure>
-        <img src="Code-SEC/plots/acc/Recall_vs_entropy.png" alt="F1-score" width="400">
-        <figcaption>Recall</figcaption>
-      </figure>
-    </td>
-    
-  </tr>
-</table>
+<img src="Code-SEC/plots/uncertainty-rev.png" alt="Uncertainty-based secret detection results" width="1000">
 
 
 
@@ -89,22 +43,7 @@ We present our observations on real and fake secrets for GAK.
 
 
 ### Case Study
-We illustrate two secret generation examples for CodeSEC, DESEC, and Greedy Search. 
+We illustrate secret generation examples and their token uncertainty.
 
-<table>
-  <tr>
-    <td>
-      <figure>
-        <img src="Code-SEC/cases/case1.png" width="800">
-        <p style="text-align: center;">STSK Generation using CodeGemma-7B</p>
-      </figure>
-    </td>
-    <td>
-      <figure>
-        <img src="Code-SEC/cases/case2.png" width="800">
-        <p style="text-align: center;">GAK Generation using DeepSeek-Coder-6.7B</p>
-      </figure>
-    </td>
-  </tr>
-</table>
+<img src="Code-SEC/cases/ACL-case-main.png" alt="Secret generation case study" width="1000">
 
