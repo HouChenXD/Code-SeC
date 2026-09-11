@@ -9,7 +9,7 @@ entropy_thresh=0.1
 OUTPUT_FILE="output/output_gemma7b/output_gak/unextracted_completed_gemma7b_greedy_cm7_with_prefix_gak_dy_st_${STEER_STEP}_pre${PREFIX}_lam_${LAM}_ent_${entropy_thresh}_ckpt_32.jsonl"
 
 export CUDA_LAUNCH_BLOCKING=1
-CUDA_VISIBLE_DEVICES="0" python Decoding/infer_CodeSEC.py \
+CUDA_VISIBLE_DEVICES="0" python Decoding/infer_Code-SeC.py \
     --model_name_or_path "$MODEL_NAME_OR_PATH" \
     --contra_model_name_or_path "gemma7b/lora/contra_gak/checkpoint-xx" \
     --input_file "$INPUT_FILE" \
