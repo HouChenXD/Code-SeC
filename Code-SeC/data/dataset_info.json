@@ -11,7 +11,7 @@
     }
   },
   "bad_dataset_gak_codellama":{
-    "file_name": "re_bad_dataset_gak_codellama.json",
+    "file_name": "bad_dataset_gak_codellama.json",
     "columns": {
       "prompt":  "instruction",
       "query":   null,
