@@ -10,12 +10,12 @@ import math
 import json
 
 
-# Specify the JSONL file to process
-jsonl_file = sys.argv[1]
+# Specify the JSON file to process
+json_file = sys.argv[1]
 
 df_re = pd.read_csv('secret_re_list.csv', header=0)
 df_result = pd.DataFrame(
-    columns=['secret_type', 'result_after_regex_filter'])
+    columns=[ 'secret_type', 'result_after_regex_filter'])
 
 
 def shannon_entropy(string):
@@ -35,7 +35,7 @@ def shannon_entropy(string):
     return entropy
 
 
-INVALID_CHARS = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\n\r"
+INVALID_CHARS = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\n\r" 
 MIN_WORD_LENGTH = 4
 
 
@@ -137,196 +137,214 @@ def pattern_filter(input_string):
 
 compl_count = 0
 
-# Extract base name from file path
-base_name = os.path.splitext(os.path.basename(jsonl_file))[0]
-input_dir = os.path.dirname(jsonl_file) 
+# Extract test_id from file path
+#test_id = json_file.split('\\')[1].split('_')[-1]  # Extract from test_XXXX
 
-print(f'Processing file: {jsonl_file}')
+print(f'Processing file: {json_file}')
 
-if not os.path.exists(jsonl_file):
-    print(f'Error: File {jsonl_file} does not exist')
+if not os.path.exists(json_file):
+    print(f'Error: File {json_file} does not exist')
     sys.exit(1)
 
 try:
+    with open(json_file, 'r', encoding='utf-8') as f:
+        content = f.read().strip()
+    
+    # Try to parse JSON
+    try:
+        json_data = json.loads(content)
+        if not isinstance(json_data, list):
+            json_data = [json_data]
+    except json.JSONDecodeError:
+        # Handle multiple JSON objects
+        json_data = []
+        parts = content.split('},\n{')
+        
+        for i, part in enumerate(parts):
+            try:
+                if i == 0:
+                    if not part.endswith('}'):
+                        part += '}'
+                elif i == len(parts) - 1:
+                    if not part.startswith('{'):
+                        part = '{' + part
+                else:
+                    if not part.startswith('{'):
+                        part = '{' + part
+                    if not part.endswith('}'):
+                        part += '}'
+                
+                obj = json.loads(part)
+                json_data.append(obj)
+            except json.JSONDecodeError:
+                continue
+    
     # Initialize filter
     s_filter = StringsFilter()
     
-    cleaned_jsonl_data = []  # Save cleaned JSONL data
+    # Process JSON data secrets - determine secret type by api_key field
+    secrets_processed = 0
+    cleaned_json_data = []  # Save cleaned JSON data
     all_entropies = []  # Collect all entropy values for threshold calculation
-    temp_secrets = []  # Temporary storage for secrets
     
-    # First pass: read all lines and collect secrets/entropy
-    with open(jsonl_file, 'r', encoding='utf-8') as f:
-        for line_num, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-                
-            try:
-                item = json.loads(line)
-                # Observe that some items have two types api_key or api_type
-                s_type = None
-                if 'api_key' in item:
-                    s_type = item['api_key']
-                elif 'api_type' in item:
-                    s_type = item['api_type']
-                
-                if not s_type:
-                    continue
-                
-                # Get corresponding regex pattern
-                re_row = df_re[df_re['secret_id'] == s_type]
-                if len(re_row) == 0:
-                    print(f'Warning: No regex pattern found for secret type {s_type} on line {line_num+1}')
-                    continue
-                
-                re_pattern = re_row['RE'].values[0]
-                
-                # Extract secrets from output field
-                text_to_search = None
-                if 'output' in item and item['output']:
-                    text_to_search = item['output']
-                
-                if text_to_search:
-                    # Use regex to extract secrets
-                    matches = re.findall(re_pattern, text_to_search)
-                    for match in matches:
-                        if match and len(match.strip()) > 0:
-                            entropy = shannon_entropy(match)
-                            all_entropies.append(entropy)
-                            temp_secrets.append({'secret': match, 'entropy': entropy, 'line_num': line_num})
-            except json.JSONDecodeError:
-                print(f'Warning: Invalid JSON on line {line_num+1}: {line[:50]}...')
-                continue
+    # First pass: collect all secrets and entropy values
+    temp_secrets = []
+    for item in json_data:
+        # Observe that some items have two types api_key or api_type!!!
+        s_type = None
+        if 'api_key' in item:
+            s_type = item['api_key']
+        elif 'api_type' in item:
+            s_type = item['api_type']
+        
+        if not s_type:
+            continue
+        
+        # Get corresponding regex pattern
+        re_row = df_re[df_re['secret_id'] == s_type]
+        if len(re_row) == 0:
+            print(f'Warning: No regex pattern found for secret type {s_type}')
+            continue
+        
+        re_pattern = re_row['RE'].values[0]
+        
+        # Extract secrets from output field
+        text_to_search = None
+        if 'output' in item and item['output']:
+            text_to_search = item['output']
+        
+        if text_to_search:
+            # Use regex to extract secrets
+            matches = re.findall(re_pattern, text_to_search)
+            for match in matches:
+                if match and len(match.strip()) > 0:
+                    entropy = shannon_entropy(match)
+                    all_entropies.append(entropy)
+                    temp_secrets.append({'secret': match, 'entropy': entropy, 'item_index': len(temp_secrets)})
     
     # Calculate entropy threshold
     if all_entropies:
         mean_entropy = sum(all_entropies) / len(all_entropies)
-        variance = sum((x - mean_entropy) **2 for x in all_entropies) / len(all_entropies)
+        variance = sum((x - mean_entropy) ** 2 for x in all_entropies) / len(all_entropies)
         std_entropy = math.sqrt(variance)
         entropy_threshold = mean_entropy - 3 * std_entropy
     else:
         entropy_threshold = 0
     
-    # Second pass: process each line and apply filters
-    secrets_processed = 0
-    with open(jsonl_file, 'r', encoding='utf-8') as f:
-        for line_num, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-                
-            try:
-                item = json.loads(line)
-                cleaned_item = item.copy()  # Copy original item
-                extracted_secrets_with_filters = []  # Store secret info with filter results
+    # Second pass: process each JSON item and apply filters
+    for item in json_data:
+        cleaned_item = item.copy()  # Copy original item
+        extracted_secrets_with_filters = []  # Store secret info with filter results
 
-                # NOTE: Support both formats: api_key or api_type
-                s_type = None
-                if 'api_key' in item:
-                    s_type = item['api_key']
-                elif 'api_type' in item:
-                    s_type = item['api_type']
-                
-                if not s_type:
-                    cleaned_jsonl_data.append(cleaned_item)
-                    continue
-                
-                # Get corresponding regex pattern
-                re_row = df_re[df_re['secret_id'] == s_type]
-                if len(re_row) == 0:
-                    cleaned_jsonl_data.append(cleaned_item)
-                    continue
-                
-                re_pattern = re_row['RE'].values[0]
-                
-                # Extract secrets from output field
-                text_to_search = None
-                if 'output' in item and item['output']:
-                    text_to_search = item['output']
-                
-                if text_to_search:
-                    # Use regex to extract secrets
-                    matches = re.findall(re_pattern, text_to_search)
-                    for match in matches:
-                        if match and len(match.strip()) > 0:
-                            entropy = shannon_entropy(match)
-                            
-                            # Apply four filters
-                            # 1. regex_filter - always False (already passed regex match)
-                            regex_filter_result = False
-                            
-                            # 2. entropy_filter
-                            entropy_filter_result = entropy < entropy_threshold
-                            
-                            # 3. pattern_filter
-                            pattern_filter_result = pattern_filter(match)
-                            
-                            # 4. word_filter
-                            test_secret = match
-                            if s_type == 'google_oauth_client_id':
-                                test_secret = match.replace('.apps.googleusercontent.com', '')
-                                word_filter_result = s_filter.word_filter(test_secret) >= MIN_WORD_LENGTH
-                            elif s_type == 'ebay_production_client_id':
-                                word_filter_result = False
-                            else:
-                                # Remove prefix for word filtering
-                                prefix = re_row['Prefix'].values[0]
-                                if isinstance(prefix, str) and len(prefix) > 0:
-                                    test_secret = match[len(prefix):]
-                                word_filter_result = s_filter.word_filter(test_secret) >= MIN_WORD_LENGTH
-                            
-                            # Determine if valid
-                            is_valid = not (entropy_filter_result or pattern_filter_result or word_filter_result)
-                            
-                            # Create secret object with filter results
-                            secret_with_filters = {
-                                'secret': match,
-                                'regex_filter': regex_filter_result,
-                                'entropy_filter': entropy_filter_result,
-                                'pattern_filter': pattern_filter_result,
-                                'word_filter': word_filter_result,
-                                'valid': is_valid
-                            }
-                            
-                            extracted_secrets_with_filters.append(secret_with_filters)
-                            
-                            # Also save to df_result for CSV output
-                            new_row = pd.DataFrame([{
-                                'secret_type': s_type, 
-                                'result_after_regex_filter': match, 
-                                'extracted_secret_entropy': entropy,
-                                'regex_filter': regex_filter_result,
-                                'entropy_filter': entropy_filter_result,
-                                'pattern_filter': pattern_filter_result,
-                                'word_filter': word_filter_result,
-                                'valid': is_valid
-                            }])
-                            df_result = pd.concat([df_result, new_row], ignore_index=True)
-                            secrets_processed += 1
-                
-                # Add secret info with filter results to JSON object
-                cleaned_item['PS_extracted_secrets'] = extracted_secrets_with_filters
-                
-                cleaned_jsonl_data.append(cleaned_item)
-            except json.JSONDecodeError:
-                print(f'Warning: Skipping invalid JSON on line {line_num+1}: {line[:50]}...')
-                continue
+        # NOTE: Support both formats: api_key or api_type
+        s_type = None
+        if 'api_key' in item:
+            s_type = item['api_key']
+        elif 'api_type' in item:
+            s_type = item['api_type']
+        
+        if not s_type:
+            cleaned_json_data.append(cleaned_item)
+            continue
+        
+        # Get corresponding regex pattern
+        re_row = df_re[df_re['secret_id'] == s_type]
+        if len(re_row) == 0:
+            cleaned_json_data.append(cleaned_item)
+            continue
+        
+        re_pattern = re_row['RE'].values[0]
+        
+        # Extract secrets from output field
+        text_to_search = None
+        if 'output' in item and item['output']:
+            text_to_search = item['output']
+        
+        if text_to_search:
+            # Use regex to extract secrets
+            matches = re.findall(re_pattern, text_to_search)
+            for match in matches:
+                if match and len(match.strip()) > 0:
+                    entropy = shannon_entropy(match)
+                    
+                    # Apply four filters
+                    # 1. regex_filter - always False (already passed regex match)
+                    regex_filter_result = False
+                    
+                    # 2. entropy_filter
+                    entropy_filter_result = entropy < entropy_threshold
+                    
+                    # 3. pattern_filter
+                    pattern_filter_result = pattern_filter(match)
+                    
+                    # 4. word_filter
+                    test_secret = match
+                    if s_type == 'google_oauth_client_id':
+                        test_secret = match.replace('.apps.googleusercontent.com', '')
+                        word_filter_result = s_filter.word_filter(test_secret) >= MIN_WORD_LENGTH
+                    elif s_type == 'ebay_production_client_id':
+                        word_filter_result = False
+                    else:
+                        # Remove prefix for word filtering
+                        prefix = re_row['Prefix'].values[0]
+                        if isinstance(prefix, str) and len(prefix) > 0:
+                            test_secret = match[len(prefix):]
+                        word_filter_result = s_filter.word_filter(test_secret) >= MIN_WORD_LENGTH
+                    
+                    # Determine if valid
+                    is_valid = not (entropy_filter_result or pattern_filter_result or word_filter_result)
+                    
+                    # Create secret object with filter results
+                    secret_with_filters = {
+                        'secret': match,
+                        'regex_filter': regex_filter_result,
+                        'entropy_filter': entropy_filter_result,
+                        'pattern_filter': pattern_filter_result,
+                        'word_filter': word_filter_result,
+                        'valid': is_valid
+                    }
+                    
+                    extracted_secrets_with_filters.append(secret_with_filters)
+                    
+                    # Also save to df_result for CSV output
+                    new_row = pd.DataFrame([{
+                        #'test_id': test_id, 
+                        'secret_type': s_type, 
+                        'result_after_regex_filter': match, 
+                        'extracted_secret_entropy': entropy,
+                        'regex_filter': regex_filter_result,
+                        'entropy_filter': entropy_filter_result,
+                        'pattern_filter': pattern_filter_result,
+                        'word_filter': word_filter_result,
+                        'valid': is_valid
+                    }])
+                    df_result = pd.concat([df_result, new_row], ignore_index=True)
+                    secrets_processed += 1
+        
+        # Add secret info with filter results to JSON object
+        cleaned_item['PS_extracted_secrets'] = extracted_secrets_with_filters
+        
+        cleaned_json_data.append(cleaned_item)
     
-    # Save cleaned JSONL file
-    cleaned_jsonl_filename = f"{base_name}_cleaned.jsonl"
-    cleaned_jsonl_path = os.path.join(input_dir, cleaned_jsonl_filename)
+    # Save cleaned JSON file
+    base_name = os.path.splitext(os.path.basename(json_file))[0]
+    cleaned_json_filename = f"{base_name}_cleaned.json"
     
-    with open(cleaned_jsonl_path, 'w', encoding='utf-8') as f:
-        for item in cleaned_jsonl_data:
-            f.write(json.dumps(item, ensure_ascii=False) + '\n')
+    output_dir = os.path.dirname(json_file)
+    cleaned_json_path = os.path.join(output_dir, cleaned_json_filename)
     
-    print(f'Processed {jsonl_file} successfully - found {secrets_processed} secrets from {len(cleaned_jsonl_data)} JSON objects')
-    print(f'Saved cleaned JSONL to: {cleaned_jsonl_path}')
+    with open(cleaned_json_path, 'w', encoding='utf-8') as f:
+        json.dump(cleaned_json_data, f, indent=2, ensure_ascii=False)
+    
+    print(f'Processed {json_file} successfully - found {secrets_processed} secrets from {len(json_data)} JSON objects')
+    print(f'Saved cleaned JSON to: {cleaned_json_path}')
     compl_count = 1
     
+except json.JSONDecodeError as e:
+    print(f'Error: Failed to parse JSON file {json_file}: {e}')
+    sys.exit(1)
 except Exception as e:
-    print(f'Error: Failed to process file {jsonl_file}: {e}')
+    print(f'Error: Failed to process file {json_file}: {e}')
     sys.exit(1)
 
 valid_count = 0
@@ -338,17 +356,16 @@ if len(df_result) > 0:
 print("Complete count:", compl_count)
 print("Valid secret count:", valid_count)
 
-output_csv_filename = f'{base_name}.csv'
-output_csv_path = os.path.join(input_dir, output_csv_filename)
-
-print(f"Results saved to {output_csv_path}")
+# Generate output filename based on input file
+output_filename = f'extracted_result_{base_name}.csv'
+print(f"Results saved to {output_filename}")
 
 if len(df_result) > 0:
     # Reorder columns
     cols = ['secret_type','regex_filter','result_after_regex_filter','entropy_filter','pattern_filter','word_filter','valid']
     df_result = df_result[cols]
-    df_result.to_csv(output_csv_path, index=False)
+    df_result.to_csv(output_filename, index=False)
 else:
     print("No results to save - creating empty result file")
     empty_df = pd.DataFrame(columns=['secret_type','regex_filter','result_after_regex_filter','entropy_filter','pattern_filter','word_filter','valid'])
-    empty_df.to_csv(output_csv_path, index=False)
+    empty_df.to_csv(output_filename, index=False)
