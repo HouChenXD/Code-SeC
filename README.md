@@ -1,8 +1,8 @@
-This repository contains a preliminary version of this paper. We propose Code-SEC, which probes
+This repository contains the code for our paper accepted at ACM CCS. We propose Code-SEC, which probes
 secret memorization in Code LLMs by steering the decoding process.
 
 ## Method
-<img src="Code-SEC/plots/ACL-method-v2.png" alt="Overview of Code-SEC" width="1000">
+<img src="Code-SEC/plots/CCS-method-v2.png" alt="Overview of Code-SEC" width="1000">
 
 ## Structure
 |         **Folder**         |                        **Description**                        |
@@ -45,5 +45,5 @@ We present our observations on real and fake secrets for GAK.
 ### Case Study
 We illustrate secret generation examples and their token uncertainty.
 
-<img src="Code-SEC/cases/ACL-case-main.png" alt="Secret generation case study" width="1000">
+<img src="Code-SEC/cases/CCS-case-main.png" alt="Secret generation case study" width="1000">
 
